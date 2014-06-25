@@ -15,3 +15,8 @@ B2. Download Filings by CIKs
       1. Find_CIKs.R
       2. Summary_by_CIKs.R
       3. Download_by_CIKs.R
+
+C.  Find Online Directory Structure (THIS IS
+      1. Directory_Structure.R (THIS IS )
+	  
+***NOTE*** SECTION C IS OPTIONAL AND IS INDEPENDENT OF THE OTHER SECTIONS (EXCEPT FOR THE CIK LIST FROM SECTION B2 - FILE 1 (Find_CIKS.R)
