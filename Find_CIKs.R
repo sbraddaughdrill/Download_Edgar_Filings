@@ -120,12 +120,13 @@ indexfolder <- "full-index"
 #downloadfolder <- "MF_All"
 #downloadfolder <- "MF_Annual_Reports"
 #downloadfolder <- "MF_SemiAnnual_Reports"
-downloadfolder <- "MF_Shareholder_Reports_N-CSR-A"
+#downloadfolder <- "MF_Shareholder_Reports_N-CSR-A"
+downloadfolder <- "MF_Shareholder_Reports_N-SAR-B"
 
 #The file that will contain the filings you want to download.
 outfile <- "filings_MF_matched.csv"
 
-#These are godo filings to help differentiate MF filings from firm filings -- these shouldn't change!!!!
+#These are good filings to help differentiate MF filings from firm filings -- these shouldn't change!!!!
 formget <- c("N-1A","N-1A/A","N-14","N-14/A","497K","497K1","497K2","497K3A","497K3B","NSAR-A","NSAR-B","N-Q","N-PX")
 formget_collapse <- paste("'",formget,"'",sep="")
 formget_collapse <- paste(formget_collapse,collapse=",")

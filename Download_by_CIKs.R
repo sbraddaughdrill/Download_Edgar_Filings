@@ -251,8 +251,9 @@ indexfolder <- "full-index"
 #downloadfolder <- "MF_Annual_Reports"
 #downloadfolder <- "MF_Shareholder_Reports_N-CSR-A"
 #downloadfolder <- "MF_Shareholder_Reports_N-CSRS-A"
-downloadfolder <- "MF_Shareholder_Reports_N-CSR"
+#downloadfolder <- "MF_Shareholder_Reports_N-CSR"
 #downloadfolder <- "MF_Shareholder_Reports_N-CSRS"
+downloadfolder <- "MF_Shareholder_Reports_N-SAR-B"
 
 #The sub directory you are going to download filings to
 txtfolder <- "txt"
@@ -284,8 +285,9 @@ address_http <- "http://www.sec.gov/Archives/"
 #formget <- c("NSAR-A")
 #formget <- c("N-CSR/A")
 #formget <- c("N-CSRS/A")
-formget <- c("N-CSR")
+#formget <- c("N-CSR")
 #formget <- c("N-CSRS")
+formget <- c("NSAR-B")
 
 formget_collapse <- paste("'",formget,"'",sep="")
 formget_collapse <- paste(formget_collapse,collapse=",")
