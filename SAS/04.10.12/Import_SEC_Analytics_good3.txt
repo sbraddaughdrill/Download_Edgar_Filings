@@ -1,0 +1,1250 @@
+*=====================================================================;
+*PROGRAM DETAILS;
+*=====================================================================;
+*Program: 	Import_SEC_Analytics.sas;
+*Version: 	1.0;
+*Author:    S. Brad Daughdrill;
+*Date:		02.29.2012;
+*Purpose:	Import data from WRDS SEC Analytics Suite;
+*=====================================================================;
+*MACROS USED;
+*=====================================================================;
+*-------------------------------Name----------------------------------;
+* %DeleteMacros;
+* %IncludeMacros (projfolder=,researchfolder=);
+* %HeaderOptions;
+* %GlobalMacroVars;
+* %Import (directory=, inputlibname=,outputlibname=,droppedvariables=);
+* %VarDescrip (directory=,inputlibraryname=,inputdataset=, 
+			   outputdataset=, outputfilename=);
+* %DataSetList (inputlibraryname=, outputdataset=);
+* %DescripStat (directory=,inputlibraryname=,outputdataset=);
+* %VariableList (inputlibraryname=,inputdataset=,outputdataset=,
+				 outputdatasetsorted=,droppedvariables=);
+* %VariableOBSCount (inputdataset=,variables=,totalobs=,totalvars=);
+*=====================================================================;
+*%include "C:\Users\bdaughdr\Dropbox\Research\SAS\Macros\Brad\DeleteMacros.sas"; *Office;
+*%include "\\tsclient\C\Users\bdaughdr\Dropbox\Research\SAS\Macros\Brad\DeleteMacros.sas"; *CoralSea from Office;
+%include "\\tsclient\C\Users\S. Brad Daughdrill\Documents\My Dropbox\Research\SAS\Macros\Brad\DeleteMacros.sas";  *CoralSea from Home;
+*=====================================================================;
+*Delete Macro Variables;
+*=====================================================================;
+%DeleteMacros;
+*=====================================================================;
+*Create Macro Directory;
+*=====================================================================;
+%global fullmacrodirectory;
+*%let fullmacrodirectory=C:\Users\bdaughdr\Dropbox\Research\SAS\Macros; *Office;
+*%let fullmacrodirectory=\\tsclient\C\Users\bdaughdr\Dropbox\Research\SAS\Macros; *CoralSea from Office;
+%let fullmacrodirectory=\\tsclient\C\Users\S. Brad Daughdrill\Documents\My Dropbox\Research\SAS\Macros;  *CoralSea from Home;
+*=====================================================================;
+*Create Local Directories;
+*=====================================================================;
+*%symdel projectrootdirectory;
+%global projectrootdirectory;
+%let projectrootdirectory=H:\Research\Web_Crawler;
+*=====================================================================;
+*Macro includes;
+*=====================================================================;
+%include "&fullmacrodirectory.\IncludeMacros.sas";
+%IncludeMacros (projfolder=&projectrootdirectory.,researchfolder=&fullmacrodirectory.);
+*=====================================================================;
+*Sets initial options (clears output window and log, sets linesize,etc.);
+*=====================================================================;
+title;
+footnote;
+
+options ls=102;
+options ps=80;
+options label;
+options nocenter;
+
+/*
+options macrogen;  *macro debugging;
+options mlogic;    *macro debugging;
+options mprint;    *echo macro text;
+options notes;     *time-used notes;
+options symbolgen; *macro debugging;
+options source;  *echo statements;
+options source2; *echo includes;
+options mfile;
+options spool;
+*/
+
+options nomacrogen;  *no macro debugging;
+options nomlogic;    *no macro debugging;
+options nomprint;    *no echo macro text;
+options nonotes;     *no time-used notes;
+options nosymbolgen; *no macro debugging;
+options nosource;    *no echo statements;
+options nosource2;   *no echo includes;
+options nomfile;
+options nospool;
+
+
+DM 'clear output';    	
+DM 'clear log';
+DM 'GRAPH; CANCEL;'; 
+
+proc greplay igout=work.gseg nofs;
+	delete _all_;
+	run;
+quit;
+*=====================================================================;
+*Define log and output path;
+*=====================================================================;
+Proc printto log="&projectrootdirectory.\mylog.log";
+run;
+proc printto print="&projectrootdirectory.\myoutput.lst";
+run;
+Proc printto log=log;
+run;
+Proc printto print=print;
+run;
+*=====================================================================;
+*Global Macro Variables;
+*=====================================================================;
+%GlobalMacroVars;
+*=====================================================================;
+*Creates Libraries;
+*=====================================================================;
+%let rawdatalibrary=rawdata;
+libname &rawdatalibrary. "&projectrootdirectory.\Data\Original";
+%let finaldatalibrary=gooddata;
+libname &finaldatalibrary. "&projectrootdirectory.\Data\Final";
+%let testdatalibrary=testdata;
+libname &testdatalibrary. "&projectrootdirectory.\Data\Test";
+%let emdatalibrary=emdata;
+libname &emdatalibrary. "C:\Documents and Settings\bdaughdr\My Documents\My SAS Files\9.2";
+*=====================================================================;
+*Prompt for WRDS login password;
+*=====================================================================;
+%let pwwrds=BigBrad12;
+/*%window info
+  #5 @5 'Please enter WRDS password:'
+  #5 @33 pwwrds 32 attr=underline display=yes;
+%display info;*/
+*=====================================================================;
+*Encode login password;
+*=====================================================================;
+%let pwfilename=pwfile;
+filename &pwfilename. "&projectrootdirectory.\Data\Original\&pwfilename..txt";
+proc pwencode in="&pwwrds." out=&pwfilename.;
+run;
+data _null_;
+	infile &pwfilename. obs=1 length=l; 
+	input @;
+	input @1 line $varying1024. l; 
+	call symput('dbpass',substr(line,1,l)); 
+run;
+*=====================================================================;
+*Delete password file;
+*=====================================================================;
+data _null_;
+	rc=filename("&pwfilename.","&projectrootdirectory.\Data\Original\&pwfilename..txt");
+    if rc = 0 and fexist("&pwfilename.") then do;
+       rc=fdelete("&pwfilename.");
+	end;
+    rc=filename("&pwfilename.");
+run;
+*=====================================================================;
+*Use this step if using SAS/Connect to WRDS (do step idependently of others);
+*=====================================================================;
+*%let wrds = wrds-cloud.wharton.upenn.edu 4016;
+%let wrds = wrds.wharton.upenn.edu 4016; 
+options comamid=TCP remote=WRDS;  
+signon username=bdaughdr password="&dbpass";
+*=====================================================================;
+*Reassign libnames so that datasets can be viewed in SAS Explorer;
+*=====================================================================;
+*rsubmit;
+*%include 'wrdslib_remote.sas';
+*endrsubmit;
+libname myhome remote  '.' server=WRDS;
+libname mysec remote  '/wrds/sec/sasdata' server=WRDS;
+
+*Home Library Name to save the final SAS dataset;
+rsubmit;
+libname myh '.'; 
+libname wrdssec '/wrds/sec/sasdata';
+endrsubmit;
+*********************************************************************************;
+*STEP ONE: Extract data;
+*********************************************************************************;
+/*
+rsubmit;
+%let my_names_vars = CIK CONAME GVKEY CUSIPH TICKERH CUSIP_FULL CUSIP;	
+data my_names(keep = &my_names_vars.);	
+	set wrdssec._names_;
+run;
+proc download data=my_names out=my_names; run;
+endrsubmit;
+
+rsubmit;
+data my_qvards;	
+	set wrdssec._qvards_;
+run;
+proc download data=my_qvards out=my_qvards; run;
+endrsubmit;
+
+rsubmit;
+%let my_dforms_yrstrt = 2008;			
+%let my_dforms_yrend = 2008;	
+%let my_dforms_vars = CIK FDATE SECDATE FORM CONAME FNAME;
+data my_dforms(keep = &my_dforms_vars.);	
+	set wrdssec.dforms;
+	where year(fdate) between (&my_dforms_yrstrt.-1) and (&my_dforms_yrend.+1); 
+run;
+proc download data=my_dforms out=my_dforms; run;
+endrsubmit;
+
+rsubmit;
+%let my_fforms_yrstrt = 2008;			
+%let my_fforms_yrend = 2008;
+%let my_fforms_vars = CIK FDATE SECDATE FORM CONAME FNAME;
+data my_fforms(keep = &my_fforms_vars.);	
+	set wrdssec.fforms;
+	where year(fdate) between (&my_fforms_yrstrt.-1) and (&my_fforms_yrend.+1); 
+run;
+proc download data=my_fforms out=my_fforms; run;
+endrsubmit;
+
+rsubmit;
+%let my_forms_yrstrt = 2008;			
+%let my_forms_yrend = 2008;
+%let my_forms_vars = GVKEY CIK FDATE FINDEXDATE LINDEXDATE FORM CONAME FNAME INAME SOURCE;
+data my_forms(keep = &my_forms_vars.);	
+	set wrdssec.forms;
+	where year(fdate) between (&my_forms_yrstrt.-1) and (&my_forms_yrend.+1); 
+run;
+proc download data=my_forms out=my_forms; run;
+endrsubmit;
+
+rsubmit;
+%let my_items8k_yrstrt = 2008;			
+%let my_items8k_yrend = 2008;
+%let my_items8k_vars = GVKEY CIK FDATE FORM CONAME FNAME FSIZE RDATE SECADATE SECATIME NITEM ITEM NITEMNO ITEMNO;
+data my_items8k(keep = &my_items8k_vars.);	
+	set wrdssec.items8k;
+	where year(fdate) between (&my_items8k_yrstrt.-1) and (&my_items8k_yrend.+1); 
+run;
+proc download data=my_items8k out=my_items8k; run;
+endrsubmit;
+
+rsubmit;
+%let my_items8k2_yrstrt = 2008;			
+%let my_items8k2_yrend = 2008;
+%let my_items8k2_vars = GVKEY CIK FDATE FORM CONAME FNAME FSIZE RDATE SECADATE SECATIME NITEM ITEM NITEMNO;
+data my_items8k2(keep = &my_items8k2_vars.);	
+	set wrdssec.items8k2;
+	where year(fdate) between (&my_items8k2_yrstrt.-1) and (&my_items8k2_yrend.+1); 
+run;
+proc download data=my_items8k2 out=my_items8k2; run;
+endrsubmit;
+
+rsubmit;
+%let my_items8k_list_vars = NITEM ITEM;
+data my_items8k_list(keep = &my_items8k_list_vars.);	
+	set wrdssec.items8k_list;
+run;
+proc download data=my_items8k_list out=my_items8k_list; run;
+endrsubmit;
+
+rsubmit;
+%let my_wciklink_cusip_vars = CIK CONAME CUSIP_FULL CUSIP CIKDATE1 CIKDATE2 TMATCH ISSUER ISSUE ISSUE_CHECK VALIDATED;
+data my_wciklink_cusip(keep = &my_wciklink_cusip_vars.);	
+	set wrdssec.wciklink_cusip;
+run;
+proc download data=my_wciklink_cusip out=my_wciklink_cusip; run;
+endrsubmit;
+
+rsubmit;
+%let my_wciklink_gvkey_vars = GVKEY CONM DATADATE1 DATADATE2 CIK SOURCE CONAME FNDATE LNDATE N10K N10K_NT N10K_A N10Q N10Q_NT N10Q_A NDEF N8K NTOT FLAG;
+data my_wciklink_gvkey(keep = &my_wciklink_gvkey_vars.);	
+	set wrdssec.wciklink_gvkey;
+run;
+proc download data=my_wciklink_gvkey out=my_wciklink_gvkey; run;
+endrsubmit;
+
+rsubmit;
+%let my_wciklink_names_vars = CIK CONAME FNDATE LNDATE N10K N10K_NT N10K_A N10Q N10Q_NT N10Q_A NDEF N8K NLET N13D N13G N13F NTOT NTOT_NT NTOT_A HEADER GVKEY CUSIPH TICKERH;
+data my_wciklink_names(keep = &my_wciklink_names_vars.);	
+	set wrdssec.wciklink_names;
+run;
+proc download data=my_wciklink_names out=my_wciklink_names; run;
+endrsubmit;
+
+rsubmit;
+%let my_wforms_yrstrt = 2008;			
+%let my_wforms_yrend = 2008;
+%let my_wforms_vars = GVKEY CIK FDATE FINDEXDATE LINDEXDATE FORM CONAME FNAME INAME SOURCE FSIZE ISIZE;
+data my_wforms(keep = &my_wforms_vars.);	
+	set wrdssec.wforms;
+	where year(fdate) between (&my_wforms_yrstrt.-1) and (&my_wforms_yrend.+1); 
+run;
+proc download data=my_wforms out=my_wforms; run;
+endrsubmit;
+
+rsubmit;
+%let my_wforms2_yrstrt = 2008;			
+%let my_wforms2_yrend = 2008;
+%let my_wforms2_vars = GVKEY CIK FDATE FINDEXDATE LINDEXDATE FORM CONAME FNAME INAME SOURCE FSIZE ISIZE RDATE SECADATE SECATIME SIC STATE_INC STATE_HDQ ZIP_HDQ FYE;
+data my_wforms2(keep = &my_wforms2_vars.);	
+	set wrdssec.wforms2;
+	where year(fdate) between (&my_wforms2_yrstrt.-1) and (&my_wforms2_yrend.+1); 
+run;
+proc download data=my_wforms2 out=my_wforms2; run;
+endrsubmit;
+*/
+
+
+
+*NOTE:  Earliest date in Edgar is 1994;
+rsubmit;
+%let my_exhibits_yrstrt = 2007;			
+%let my_exhibits_yrend = 2008;
+%let my_exhibits_vars = GVKEY CIK FDATE FORM CONAME FNAME FSIZE RDATE SECADATE SECATIME SEQUENCE TYPE DESCRIPTION FILENAME;
+data my_exhibits(keep = &my_exhibits_vars.);	
+	set wrdssec.exhibits;
+	*where year(fdate) between (&my_exhibits_yrstrt.-1) and (&my_exhibits_yrend.+1); 
+	where year(fdate) between (&my_exhibits_yrstrt.) and (&my_exhibits_yrend.); 
+run;
+proc download data=my_exhibits out=my_exhibits; run;
+endrsubmit;
+
+*Find and remove filings that aren't 10-k's;
+rsubmit;
+data my_exhibits_not_10k;	
+	set my_exhibits;
+	where form not like '%10%K%';
+run;
+proc download data=my_exhibits_not_10k out=my_exhibits_not_10k; run;
+data my_exhibits_10k;	
+	set my_exhibits;
+	where form like '%10%K%';
+run;
+proc download data=my_exhibits_10k out=my_exhibits_10k; run;
+endrsubmit;
+
+*Find and remove exhibits, graphics, etc;
+rsubmit;
+data my_exhibits_10k_extra;	
+	set my_exhibits_10k;
+	where type not like '%10%K%';
+run;
+proc download data=my_exhibits_10k_extra out=my_exhibits_10k_extra; run;
+data my_exhibits_10k_no_extra;	
+	set my_exhibits_10k;
+	where type like '%10%K%';
+run;
+proc download data=my_exhibits_10k_no_extra out=my_exhibits_10k_no_extra; run;
+endrsubmit;
+
+*Find and remove the NT 10-K's;
+rsubmit;
+data my_exhibits_nt10k;	
+	set my_exhibits_10k_no_extra;
+	where type not like '10%K%';
+run;
+proc download data=my_exhibits_nt10k out=my_exhibits_nt10k; run;
+data my_exhibits_10k_no_nt10k;	
+	set my_exhibits_10k_no_extra;
+	where type like '10%K%';
+run;
+proc download data=my_exhibits_10k_no_nt10k out=my_exhibits_10k_no_nt10k; run;
+endrsubmit;
+
+*Find and remove the /A's;
+rsubmit;
+data my_exhibits_10k_a;	
+	set my_exhibits_10k_no_nt10k;
+	where type like '%A%';
+run;
+proc download data=my_exhibits_10k_a out=my_exhibits_10k_a; run;
+data my_exhibits_10k_no_a;	
+	set my_exhibits_10k_no_nt10k;
+	where type not like '%A%';
+run;
+proc download data=my_exhibits_10k_no_a out=my_exhibits_10k_no_a; run;
+endrsubmit;
+
+*Find and remove the /T's;
+rsubmit;
+data my_exhibits_10k_t;	
+	set my_exhibits_10k_no_a;
+	where type like '%T%';
+run;
+proc download data=my_exhibits_10k_t out=my_exhibits_10k_t; run;
+data my_exhibits_10k_no_t;	
+	set my_exhibits_10k_no_a;
+	where type not like '%T%';
+run;
+proc download data=my_exhibits_10k_no_t out=my_exhibits_10k_no_t; run;
+endrsubmit;
+
+*Find and remove the .PDFs;
+rsubmit;
+data my_exhibits_10k_pdfs;	
+	set my_exhibits_10k_no_t;
+	where type like '%PDF%';
+run;
+proc download data=my_exhibits_10k_pdfs out=my_exhibits_10k_pdfs; run;
+data my_exhibits_10k_no_pdfs;	
+	set my_exhibits_10k_no_t;
+	where type not like '%PDF%';
+run;
+proc download data=my_exhibits_10k_no_pdfs out=my_exhibits_10k_no_pdfs; run;
+endrsubmit;
+
+*Find and remove where fsize=0;
+rsubmit;
+data my_exhibits_10k_0_fsize;	
+	set my_exhibits_10k_no_pdfs;
+	where fsize=0;
+run;
+proc download data=my_exhibits_10k_0_fsize out=my_exhibits_10k_0_fsize; run;
+data my_exhibits_10k_not0_fsize;	
+	set my_exhibits_10k_no_pdfs;
+	where fsize^=0;
+run;
+proc download data=my_exhibits_10k_not0_fsize out=my_exhibits_10k_not0_fsize; run;
+endrsubmit;
+
+*Add counts;
+rsubmit;
+data my_exhibits_10k_not0_fsize;	
+	set my_exhibits_10k_not0_fsize;
+	fyear = year(fdate);
+	label fyear="year";
+run;
+proc sort data=my_exhibits_10k_not0_fsize;
+    by cik fyear;
+run;
+proc sql;
+	create table 		my_exhibits_10k_counts1 as
+	select  			a.*, count(a.cik) as yearly_filing_count_total
+	from 				my_exhibits_10k_not0_fsize a
+	group by 			a.cik, a.fyear
+	order by			a.cik, a.fyear;
+quit;
+proc download data=my_exhibits_10k_counts1 out=my_exhibits_10k_counts1; run;
+data my_exhibits_10k_counts2;	
+	set my_exhibits_10k_counts1;
+	by cik fyear;
+	if first.fyear then yearly_filing_count=0;
+	yearly_filing_count+1;
+	*if last.fyear then output;
+run;
+proc download data=my_exhibits_10k_counts2 out=my_exhibits_10k_counts2; run;
+endrsubmit;
+
+*Find and remove observations with multiple year counts;
+rsubmit;
+data my_exhibits_10k_multi my_exhibits_10k_single;	
+	set my_exhibits_10k_counts2;
+	if yearly_filing_count_total>1 then do;
+	    output my_exhibits_10k_multi;
+    end;
+	else do;
+	    output my_exhibits_10k_single;
+	end;
+run;
+proc download data=my_exhibits_10k_multi out=my_exhibits_10k_multi; run;
+proc download data=my_exhibits_10k_single out=my_exhibits_10k_single; run;
+endrsubmit;
+
+*Add filing addresses;
+rsubmit;
+data my_exhibits_10k_final(drop=tempurl tempurl2);	
+	format local_url_htm $100. local_url_txt $100. web_url_htm $100. web_url_txt $100.;
+	set my_exhibits_10k_single;
+	local_url_txt = cats("/wrds/sec/archives/",FNAME);
+	web_url_txt = cats("http://www.sec.gov/Archives/",FNAME);
+	tempurl = substr(FNAME,1,find(FNAME,".txt",1)-1);
+	tempurl2 = compress(tempurl,'- ');
+	local_url_htm = cats("/wrds/sec/archives/",tempurl,"-index.htm");
+	web_url_htm = cats("http://www.sec.gov/Archives/",tempurl2,"/",FILENAME);
+	cik_short = substr(FNAME,find(FNAME,"data/",1)+5,find(FNAME,"/",find(FNAME,"data/",1)+5)-find(FNAME,"data/",1)-5);
+	label local_url_txt="local URL to text file"
+          web_url_txt="web URL to text file"
+          local_url_htm="local URL to htm file"
+          web_url_htm="web URL to htm file"
+          cik_short="cik_short";
+run;
+proc download data=my_exhibits_10k_final out=my_exhibits_10k_final; run;
+endrsubmit;
+
+*Make local_backup of data;
+data &testdatalibrary..my_exhibits_10k_final;	
+	set my_exhibits_10k_final;
+run;
+
+***TEST***;
+proc sql;
+	create table 		test_form as
+	select  			unique a.form, count(a.form) as form_count
+	from 				my_exhibits a
+    group by 			a.form;
+quit;
+proc sql;
+	create table 		test_type as
+	select  			unique a.type, count(a.type) as type_count
+	from 				my_exhibits a
+    group by 			a.type;
+quit;
+***END TEST***;
+
+
+
+
+
+/*
+*Print last downloaded data;
+proc print data=&syslast(obs=100); 
+  by CIK;
+  id fyear;
+  var coname web_url_htm;
+run;
+
+*select top 20;
+proc sql outobs=20;
+	create table 	my_exhibits_10k_final_20 as 
+	select 			a.*
+	from 			my_exhibits_10k_final as a;
+quit;
+*/
+
+*=====================================================================;
+*Product Description Macro;
+*=====================================================================; 
+*Include Macro locally;
+%include "&projectrootdirectory.\SAS\lineparse_Brad.sas";
+%include "&projectrootdirectory.\SAS\textparse_Brad.sas";
+%include "&projectrootdirectory.\SAS\paraparse_Brad.sas";
+%include "&projectrootdirectory.\SAS\lineparaparse_Brad.sas";
+
+*Upload macros to WRDS server;
+rsubmit;
+filename rfile1 "lineparse_Brad.sas";
+proc upload infile="H:\Research\Web_Crawler\SAS\lineparse_Brad.sas" outfile=rfile1;
+run;
+filename rfile2 "textparse_Brad.sas";
+proc upload infile="H:\Research\Web_Crawler\SAS\textparse_Brad.sas" outfile=rfile2;
+run;
+filename rfile3 "paraparse_Brad.sas";
+proc upload infile="H:\Research\Web_Crawler\SAS\paraparse_Brad.sas" outfile=rfile3;
+run;
+filename rfile4 "lineparaparse_Brad.sas";
+proc upload infile="H:\Research\Web_Crawler\SAS\lineparaparse_Brad.sas" outfile=rfile4;
+run;
+endrsubmit;
+
+/*LINEPARSE_BRAD macro:  WRDS-SEC Line-by-Line Parser for a given text or regular expression preserving tabular format preserving tabular format.*/
+/*
+rsubmit;
+%include "lineparse_Brad.sas";
+%let string=Item 2.;
+*%LINEPARSE_BRAD(INSET=my_exhibits_10k_final,OUTSET=lineparse_output,FNAME_FULL=local_url_txt,TSTR=&string.);
+*%LINEPARSE(INSET=my_exhibits_10k_final,OUTSET=lineparse_output,FNAME_FULL=local_url_txt,TSTR=&string.);
+proc download data=lineparse_output out=lineparse_output;
+run;
+endrsubmit;
+*/
+
+
+/*TEXTPARSE_BRAD macro:  Parses WRDS-SEC filings for any hits that match a given string or regular expression, and extracts in addition to the match line, a pre-specified number of preceding characters.*/
+rsubmit;
+%include "textparse_Brad.sas";
+%let string=Item 2.;
+%let num=300;
+%TEXTPARSE_BRAD(INSET=my_exhibits_10k_final,OUTSET=textparse_output,FNAME_FULL=local_url_txt,TSTR=&string.,ln=&num.);
+/*%TEXTPARSE(INSET=my_exhibits_10k_final,OUTSET=textparse_output,FNAME_FULL=local_url_txt,TSTR=&string.,ln=&num.);*/
+proc download data=textparse_output out=textparse_output;
+run;
+endrsubmit;
+
+/*PARAPARSE_BRAD macro:  Parses WRDS-SEC filings and extracts a paragraph with pre-specified number of text lines around a given match string.*/
+rsubmit;
+%include "paraparse_Brad.sas";
+%include "lineparaparse_Brad.sas";
+%let string=Item 2.;
+%let num2=20;
+%PARAPARSE_BRAD(INSET=my_exhibits_10k_final,OUTSET=paraparse_output,FNAME_FULL=local_url_txt,TSTR=&string.,NLINE=&num2.);
+/*%PARAPARSE(INSET=my_exhibits_10k_final,OUTSET=paraparse_output,FNAME_FULL=local_url_txt,TSTR=&string.,NLINE=&num2.);*/
+proc download data=paraparse_output out=paraparse_output;
+run;
+endrsubmit;
+
+
+*=====================================================================;
+*Find non-matches;
+*=====================================================================;
+rsubmit;
+data textparse_nomatch textparse_match;
+    set textparse_output;
+    if Match=0 then output textparse_nomatch;
+	else output textparse_match;
+run;
+proc download data=textparse_nomatch out=textparse_nomatch;
+run;
+proc download data=textparse_match out=textparse_match;
+run;
+endrsubmit;
+*=====================================================================;
+*Cleanup descriptions;
+*=====================================================================;
+rsubmit;
+data textparse_match(drop=Match_Text Match_Text_compress1-Match_Text_compress3 Match_Text_compbl Match_Text_trim);
+    set textparse_match;
+    Match_Text_compress1=compress(Match_Text,,"p");  *Compressing punctuation characters;
+    Match_Text_compress2=compress(Match_Text_compress1,"+-","d");  *Compressing digits and plus/minus signs characters;
+    Match_Text_compress3=compress(Match_Text_compress2,,"c");  *Compressing control characters;
+    Match_Text_compbl=compbl(Match_Text_compress3);
+    Match_Text_trim=trim(Match_Text_compbl);
+    Match_Text_upcase = upcase(Match_Text_trim);
+run;
+proc download data=textparse_match out=textparse_match;
+run;
+data textparse_match(rename=(Match_Text_upcase=Match_Text));
+    set textparse_match;
+    if Match_Text_upcase="" then delete;
+run;
+proc download data=textparse_match out=textparse_match;
+run;
+endrsubmit;
+
+*Replace SAS words that break macro;
+data textparse_match_final(drop=ob);
+    format id $30.;
+    set textparse_match;
+	Match_Text = tranwrd(Match_Text,'AND','_AND');
+	Match_Text = tranwrd(Match_Text,'OR','_OR');
+	Match_Text = tranwrd(Match_Text,'NOT','_NOT');
+	Match_Text = tranwrd(Match_Text,'IN','_IN');
+	Match_Text = tranwrd(Match_Text,'ON','_ON');
+	Match_Text = tranwrd(Match_Text,'BETWEEN','_BETWEEN');
+	ob=_N_;
+	id=cats("dsn",ob);
+run;
+
+
+*Drop all columns except for the one with the desired text;
+data textparse_match_trim(keep= Match_Text);
+    set textparse_match_final;
+run;
+
+*Determine number of observations in dataset with descriptions;
+data _null_;
+	set textparse_match_trim end=last;
+	*call symputx("Match_Textid"||left(put(_n_,4.)), trim(left(Match_Text)),L);
+	call symput ("nobsid", _n_); * keep overwriting value until end = total obs.;
+run;
+
+*Create ;
+proc sql noprint;
+    create table 		percentiles as
+    select  			unique a.year
+    from 				percentiles0 a;
+quit;
+proc datasets lib=work nolist; delete percentiles0 ; quit; run;
+
+
+*Create lookup table for percentiles;
+data percentiles;
+   format  Confidence_Level 5.3;
+   input  Confidence_Level;
+   datalines;
+.99
+.95
+.90
+; 
+data percentiles0;
+    format  Confidence_Pct z4.1 Significance_Level 5.3 Significance_Pct z5.1;
+    set percentiles;
+	Confidence_Pct=Confidence_Level*100;
+    Significance_Level=1-Confidence_Level;
+    Significance_Pct=Significance_Level*100;
+	Confidence_lbl0 = put(Confidence_Pct, z4.1);
+    Significance_lbl0 = put(Significance_Pct, z5.1);
+run;
+data percentiles0(drop=Confidence_lbl0-Confidence_lbl5 Significance_lbl0-Significance_lbl5);
+    format Confidence_lbl $6. Significance_lbl $7.;
+    set percentiles0;
+	Confidence_lbl1=compress(Confidence_lbl0,,"p");  *Compressing decimals characters;
+	Confidence_lbl2=compress(Confidence_lbl1,,"s");  *Compressing space characters;
+    Confidence_lbl3=compress(Confidence_lbl2,,"t");  *Trims trailing blanks;
+    Confidence_lbl4=compbl(Confidence_lbl3);
+    Confidence_lbl5=trim(Confidence_lbl4);
+    Confidence_lbl=cats(Confidence_lbl5,"pct");
+	Significance_lbl1=compress(Significance_lbl0,,"p");  *Compressing decimals characters;
+	Significance_lbl2=compress(Significance_lbl1,,"s");  *Compressing space characters;
+    Significance_lbl3=compress(Significance_lbl2,,"t");  *Trims trailing blanks;
+    Significance_lbl4=compbl(Significance_lbl3);
+    Significance_lbl5=trim(Significance_lbl4);
+    Significance_lbl=cats(Significance_lbl5,"pct");
+run;
+proc datasets lib=work nolist; delete percentiles ; quit; run; 
+proc sql noprint;
+    create table 		percentiles as
+    select  			a.Confidence_Level, a.Confidence_Pct, a.Confidence_lbl, a.Significance_Level, a.Significance_Pct, a.Significance_lbl
+    from 				percentiles0 a;
+quit;
+proc datasets lib=work nolist; delete percentiles0 ; quit; run; 
+data _null_;
+	set percentiles end=last;
+	call symputx("Confidence_lbl_id"||left(put(_n_,4.)), trim(left(Confidence_lbl)),L);
+	call symputx("Significance_lvl_id"||left(put(_n_,4.)), trim(left(Significance_Level)),L);
+	call symput ("Percentile_nobs", _n_); * keep overwriting value until end = total obs.;
+run;
+
+
+*=====================================================================;
+*Split Macros;
+*=====================================================================;
+
+
+*define the macro Explode;
+%macro explode(text=,dataset=,delim=,arrayref=);
+   /* %put ; %put ### START. Explode Macro on <&dataset.> in column <&text.>; */
+    %if %length(&dataset) = 0 %then %do;
+        %let i=0;
+        %let largestword = 8;
+        %local returnvalue;
+        %do %until (&&word&i=%str( ));
+            %let i=%eval(&i+1);
+            %let word&i= %scan(&text,&i,&delim);
+            %if &&word&i^=%str( ) %then %do;
+                %let returnvalue = &returnvalue %str(%')&&word&i%str(%'), ;
+                %if %length(&returnvalue) > &largestword %then %let largestword = %length(&returnvalue);
+            %end;
+        %end;
+        %let i = %eval (&i - 1);
+        %let returnvalue = array &arrayref (&i) $ &largestword _TEMPORARY_ (&returnvalue;
+        %let end = %eval(%eval(%length(&returnvalue)) - 2);
+        %let returnvalue = %substr(%bquote(&returnvalue),1,&end);
+        %let returnvalue = &returnvalue );
+        &returnvalue;
+    %end;
+    %else %do;
+        proc sql noprint;
+        select   count(*) into: nObs_explode
+        from     &dataset;
+        quit;
+        %let largestWord=8;
+        %let maxWords=0;
+        %do k=1 %to &nObs_explode;
+            data _null_;
+                pointer=&k;
+                set &dataset point=pointer;
+                call symput('toSplit',trim(&text)); 
+                stop;
+            run;
+            %let i=0;
+            %do %until (&&word&i=%str( ));
+                %let i=%eval(&i+1);
+                %let word&i= %scan(&toSplit,&i,&delim);
+                %if &&word&i^=%str( ) %then %do;
+                    %if %length(&&word&i) > &largestword %then %let largestword = %length(&&word&i);
+                    %if %eval(&i > &maxWords) %then %let maxwords=&i;
+                %end;
+            %end;
+        %end;
+        data &dataset._out;
+            attrib _part length=$&largestword;
+            set &dataset;
+            array &arrayRef (&maxWords) $ &largestword _part1-_part&maxWords;
+            _i=0;
+            do until (compress(_part)='');
+                _i = _i + 1;
+                _part = scan(&text,_i,' ');
+                if compress(_part) ^= ' ' then &arrayRef(_i) = _part;
+            end;
+            drop _part _i;
+        run;
+        data &dataset._out;
+		    set &dataset._out;
+			label %do n = 1 %to &maxWords.; _part&n.="_part&n." %end; ;
+		run;
+    %end;
+%mend explode;
+
+*define the macro Split;
+%macro split(ndsn=,npct=,colpre=,ds=,col=); 
+    /*%put ; %put ### START. Split Macro;*/
+    data %do j = 1 %to &ndsn.; dsn&j. %end; ; 
+        retain numlines; 
+        set &ds. nobs=nobs; 
+        if _n_ eq 1 then do; 
+            if mod(nobs,&ndsn.) eq 0 then do;
+                numlines=int(nobs/&ndsn.); 
+		    end;
+            else do;
+                numlines=int(nobs/&ndsn.)+1; 
+			do;
+        end; 
+        if _n_ le numlines then do;
+            output dsn1; 
+		end;
+        %do m = 2 %to &ndsn.; 
+            else if _n_ le (&m.*numlines) then do;
+                output dsn&m.; 
+		    end;
+        %end; 
+    run; 
+	%do m = 1 %to &ndsn.; 
+        data dsn&m.(drop=numlines);
+            set dsn&m.;
+        run;
+    %end;
+	
+    *explode descriptions and delete temporary datasets;
+    %do l = 1 %to &ndsn.; 
+        %explode(text=&col., dataset=_&l., delim=%str( ), arrayRef=y&l.);
+    %end;
+   proc datasets lib=work nolist; delete %do m = 1 %to &ndsn.; dsn&m. %end;  ; quit; run;  
+    *transpose descriptions and delete temporary datasets;
+    %do m = 1 %to &ndsn.; 
+        proc transpose data=dsn&m._out out=dsn&m._out_t;
+            var _ALL_;
+        run;
+        data dsn&m._out_t(drop=_Name_ _Label_);
+            set dsn&m._out_t(rename=(COL1=&col.));
+	        if _N_=1 then delete;
+        run;
+        data dsn&m._out_t;
+            set dsn&m._out_t;
+	        &col. = compress(&col.,'_');
+        run;
+    %end;
+    proc datasets lib=work nolist; delete %do i = 1 %to &ndsn.; dsn&i._out %end;  ; quit; run; 
+    *sort the datasets for merging and create summary statistics;
+    %do m = 1 %to &ndsn.; 
+	    proc sort data=dsn&m._out_t;
+	        by &col.;
+        run;
+	    proc means data=dsn&m._out_t noprint;
+	        class &col.;
+            output out=dsn&m._out_t_stats;
+        run;
+		proc sql noprint;
+            select   _FREQ_ into: total_words_&m.
+            from     dsn&m._out_t_stats
+			where    _TYPE_=0;
+        quit;
+	    data dsn&m._out_t_stats;
+            set dsn&m._out_t_stats;
+			total_percentage=_FREQ_ / &&total_words_&m.;
+        run;
+        proc sort data=dsn&m._out_t_stats;
+            by descending _FREQ_ &col.;
+        run;
+    %end;
+    *create global dictionary and delete temporary datasets;
+    data dsn_global;
+        set %do m = 1 %to &ndsn.; dsn&m._out_t %end; ;  
+    run;
+    proc datasets lib=work nolist; delete %do m = 1 %to &ndsn.; dsn&m._out_t %end;  ; quit; run; 
+
+    *Save global dictionary to test directories;
+	data &testdatalibrary..dsn_global;
+        set dsn_global;
+    run;
+    data &emdatalibrary..dsn_global;
+        set dsn_global;
+    run;
+	*Compute summary statistics for global dictionary;
+	proc means data=dsn_global noprint;
+		class &col.;
+		output out=dsn_global_stats;
+	run;
+    proc sql noprint;
+        select   _FREQ_ into: global_total_words
+        from     dsn_global_stats
+		where    _TYPE_=0;
+    quit;
+	data dsn_global_stats;
+        set dsn_global_stats;
+        total_percentage=_FREQ_ / &global_total_words.;
+    run;
+	proc sort data=dsn_global_stats;
+	    by descending _FREQ_ &col.;
+    run;
+	proc datasets lib=work nolist; delete dsn_global ; quit; run;
+
+    *Find the top x% entries;
+    proc sql noprint;
+        select   count(&col.) into: global_distinct_words
+        from     dsn_global_stats
+        where    _TYPE_=1;
+    quit;
+	data dsn_global_stats;
+        set dsn_global_stats;
+        %do z = 1 %to &npct.;  
+		    Word_Cutoff_&&Confidence_lbl_id&z.=ceil(&&Significance_lvl_id&z.*&global_distinct_words.);
+        %end;
+		obnum=_N_;
+		obnumminus1=obnum-1;
+    run;
+	data dsn_global_stats(drop= %do z = 1 %to &npct.; Word_Cutoff_&&Confidence_lbl_id&z. %end; obnum obnumminus1);
+        set dsn_global_stats;
+        if _TYPE_=0 then do;
+		    %do z = 1 %to &npct.;  
+		        Word_dv_&&Confidence_lbl_id&z.= -1;
+            %end;
+        end;
+		else if _TYPE_=1 then do;
+		    %do z = 1 %to &npct.;  
+                if obnumminus1<=Word_Cutoff_&&Confidence_lbl_id&z. then do;
+			        Word_dv_&&Confidence_lbl_id&z. = 1;
+		        end;
+		        else do;
+		            Word_dv_&&Confidence_lbl_id&z. = 0;
+                end;
+            %end;
+        end;
+    run; 
+    proc sort data=dsn_global_stats;
+        by %do z = 1 %to &npct.; descending Word_dv_&&Confidence_lbl_id&z. %end; descending _FREQ_ &col.;
+    run;
+	*Create individual dicitonary for the most commonly used percentiles of words;
+	%do z = 1 %to &npct.;
+        proc sql noprint;
+            create table 		dsn_global_excluded_&&Confidence_lbl_id&z. as
+            select  			a.&col.
+            from 				dsn_global_stats a
+            where               Word_dv_&&Confidence_lbl_id&z.=1
+            order by            a.&col.;
+        quit;
+        data _null_;
+	        set dsn_global_excluded_&&Confidence_lbl_id&z. end=last;
+	        call symputx("descrip_&&Confidence_lbl_id&z."||left(put(_n_,4.)), trim(left(&col.)),L);
+		    if last then call symput ("nobsid_&&Confidence_lbl_id&z.", _n_); 
+        run;
+	%end;
+
+    *Create global tables based on the percentiles;
+    %do z = 1 %to &npct.;
+        proc sql noprint;
+            create table 		dsn_global_&&Confidence_lbl_id&z. as
+            select  			a.&col., a._TYPE_, a._FREQ_
+            from 				dsn_global_stats a
+            where               Word_dv_&&Confidence_lbl_id&z.=0
+            order by            a.&col.;
+        quit;
+	%end;
+
+    *sort the datasets for merging and create summary statistics for the global trimmed percentiles;
+	%do z = 1 %to &npct.;
+        proc sort data=dsn_global_&&Confidence_lbl_id&z.;
+	        by &col.;
+        run;
+        proc sql noprint;
+            create table dsn_global_stats_&&Confidence_lbl_id&z. as
+            select       a.*, sum(_FREQ_) as total
+            from         dsn_global_&&Confidence_lbl_id&z. a;
+        quit;
+        data dsn_global_stats_&&Confidence_lbl_id&z.;
+            set dsn_global_stats_&&Confidence_lbl_id&z.;
+            total_percentage=_FREQ_ / total;
+        run;
+        proc sort data=dsn_global_stats_&&Confidence_lbl_id&z.;
+            by descending _TYPE_ &col.;
+        run;
+	%end;
+	proc datasets lib=work nolist; delete %do z = 1 %to &npct.; dsn_global_&&Confidence_lbl_id&z. %end; ; quit; run;
+
+    *Get the grand totals for global dataset;
+    %do z = 1 %to &npct.;
+        proc sql noprint;
+            create table 		dsn_global_stats_0_&&Confidence_lbl_id&z. as
+            select  			unique a.total
+            from 				dsn_global_stats_&&Confidence_lbl_id&z. a;
+        quit;
+        data dsn_global_stats_0_&&Confidence_lbl_id&z.(rename=(total=_FREQ_));
+		    set dsn_global_stats_0_&&Confidence_lbl_id&z.;
+        run;
+	%end;
+
+	*Get the unique grand totals for each individual dataset; 
+	%do z = 1 %to &npct.;
+        data dsn_global_stats_1_&&Confidence_lbl_id&z.;
+            set dsn_global_stats_&&Confidence_lbl_id&z.;
+            if &col.="" then delete;
+        run;
+        proc sql noprint;
+            create table 		dsn_global_stats_1_u_&&Confidence_lbl_id&z. as
+            select  			unique a.&col., count(a.&col.) as counts
+            from 				dsn_global_stats_1_&&Confidence_lbl_id&z. a;
+        quit;
+	    proc sql noprint;
+            create table 		dsn_global_stats_1_u2_&&Confidence_lbl_id&z. as
+            select  			unique a.counts
+            from 				dsn_global_stats_1_u_&&Confidence_lbl_id&z. a;
+        quit;  
+	%end;
+	proc datasets lib=work nolist; delete %do z = 1 %to &npct.; dsn_global_stats_1_&&Confidence_lbl_id&z. %end;  ; quit; run;
+	proc datasets lib=work nolist; delete %do z = 1 %to &npct.; dsn_global_stats_1_u_&&Confidence_lbl_id&z. %end;  ; quit; run;
+
+    *Combine global table *_stats_0 and *_stats_1_u2;
+	%do z = 1 %to &npct.;
+        proc sql noprint;
+            create table 		dsn_global_stats_2_&&Confidence_lbl_id&z. as
+            select  			a._FREQ_, b.counts
+            from 				dsn_global_stats_0_&&Confidence_lbl_id&z. a, dsn_global_stats_1_u2_&&Confidence_lbl_id&z. b;
+        quit;
+		data dsn_global_stats_2_&&Confidence_lbl_id&z.(rename=(_FREQ_=global_grand_totals_&&Confidence_lbl_id&z. counts=global_distinct_totals_&&Confidence_lbl_id&z.));
+            set dsn_global_stats_2_&&Confidence_lbl_id&z.;  
+        run;
+	%end;
+	proc datasets lib=work nolist; delete %do z = 1 %to &npct.; dsn_global_stats_0_&&Confidence_lbl_id&z. %end;  ; quit; run;
+    proc datasets lib=work nolist; delete %do z = 1 %to &npct.; dsn_global_stats_1_u2_&&Confidence_lbl_id&z. %end;  ; quit; run;
+
+	*Add common word flags;
+    %do m = 1 %to &ndsn.;
+        data dsn&m._all_stats;
+            set dsn&m._out_t_stats;
+			if _TYPE_=0 then do;
+		        %do z = 1 %to &npct.;  
+		            Word_dv_&&Confidence_lbl_id&z.= -1;
+                %end;
+            end;
+		    else if _TYPE_=1 then do;
+		        %do z = 1 %to &npct.;  
+				   %let temp_label =&&Confidence_lbl_id&z.;
+				    if &col. in ( %do i = 1 %to &&nobsid_&temp_label.; "&&descrip_&temp_label&i." %end;) then do;
+                        Word_dv_&&Confidence_lbl_id&z.=1;
+                    end;
+			        else do;
+                        Word_dv_&&Confidence_lbl_id&z.=0;
+                    end;
+					
+                %end;
+            end;
+        run;
+		proc sort data=dsn&m._all_stats;
+            by %do z = 1 %to &npct.; descending Word_dv_&&Confidence_lbl_id&z. %end; descending _FREQ_ &col.;
+        run;
+	%end;
+	proc datasets lib=work nolist; delete %do m = 1 %to &ndsn.; dsn&m._out_t_stats %end;  ; quit; run;
+
+    *Create individual tables based on the percentiles;
+    %do m = 1 %to &ndsn.;
+        %do z = 1 %to &npct.;  
+	        proc sql noprint;
+                create table 		dsn&m._&&Confidence_lbl_id&z. as
+                select  			a.&col., a._TYPE_, a._FREQ_
+                from 				dsn&m._all_stats a
+                where               Word_dv_&&Confidence_lbl_id&z.=0
+                order by            a.&col.;
+            quit;
+        %end;
+    %end;
+
+	*Sort the datasets for merging and create summary statistics for the individual trimmed percentiles;
+    %do m = 1 %to &ndsn.; 
+	    %do z = 1 %to &npct.;  
+	        proc sort data=dsn&m._&&Confidence_lbl_id&z.;
+	            by &col.;
+            run;
+		    proc sql noprint;
+		        create table dsn&m._stats_&&Confidence_lbl_id&z. as
+                select       a.*, sum(_FREQ_) as total
+                from         dsn&m._&&Confidence_lbl_id&z. a;
+            quit;
+	        data dsn&m._stats_&&Confidence_lbl_id&z.;
+                set dsn&m._stats_&&Confidence_lbl_id&z.;
+			    total_percentage=_FREQ_ / total;
+            run;
+            proc sort data=dsn&m._stats_&&Confidence_lbl_id&z.;
+                by descending _TYPE_ &col.;
+            run;
+        %end;
+    %end;	
+	proc datasets lib=work nolist; delete %do m = 1 %to &ndsn.; %do z = 1 %to &npct.; dsn&m._&&Confidence_lbl_id&z. %end; %end; ; quit; run;
+
+	*Create a name variable for each table (should not have to do this for the final implementation);
+    %do m = 1 %to &ndsn.; 
+	    %do z = 1 %to &npct.;  
+	        data dsn&m._stats_&&Confidence_lbl_id&z.;
+		        format id $30.;
+                set dsn&m._stats_&&Confidence_lbl_id&z.;
+			    id = "dsn&m._stats_&&Confidence_lbl_id&z.";
+            run;
+        %end;
+    %end;
+
+    *Get the grand totals for each individual dataset;
+    %do m = 1 %to &ndsn.; 
+	    %do z = 1 %to &npct.;  
+            proc sql noprint;
+                create table 		dsn&m._stats_0_&&Confidence_lbl_id&z. as
+                select  			unique a.id, a.total
+                from 				dsn&m._stats_&&Confidence_lbl_id&z. a
+                order by            a.id;
+            quit;
+		    data dsn&m._stats_0_&&Confidence_lbl_id&z.(rename=(total=_FREQ_));
+		        set dsn&m._stats_0_&&Confidence_lbl_id&z.;
+            run; 
+        %end;
+    %end;
+
+    *Get the unique grand totals for each individual dataset;
+    %do m = 1 %to &ndsn.; 
+	    %do z = 1 %to &npct.;
+	        data dsn&m._stats_1_&&Confidence_lbl_id&z.;
+                set dsn&m._stats_&&Confidence_lbl_id&z.;
+			    if &col.="" then delete;
+            run;
+            proc sql noprint;
+                create table 		dsn&m._stats_1_u_&&Confidence_lbl_id&z. as
+                select  			unique a.id, a.&col., count(a.&col.) as counts
+                from 				dsn&m._stats_1_&&Confidence_lbl_id&z. a;
+            quit;
+		    proc sql noprint;
+                create table 		dsn&m._stats_1_u2_&&Confidence_lbl_id&z. as
+                select  			unique a.id, a.counts
+                from 				dsn&m._stats_1_u_&&Confidence_lbl_id&z. a;
+            quit;
+        %end;
+    %end;
+	proc datasets lib=work nolist; delete %do m = 1 %to &ndsn.; %do z = 1 %to &npct.; dsn&m._stats_1_&&Confidence_lbl_id&z. %end; %end; ; quit; run;
+	proc datasets lib=work nolist; delete %do m = 1 %to &ndsn.; %do z = 1 %to &npct.; dsn&m._stats_1_u_&&Confidence_lbl_id&z. %end; %end; ; quit; run;
+
+	*Combine table *_stats_0 and *_stats_1_u2;
+    %do m = 1 %to &ndsn.; 
+	    %do z = 1 %to &npct.;
+            proc sql noprint;
+                create table 		dsn&m._stats_2_&&Confidence_lbl_id&z. as
+                select  			a.id, a._FREQ_, b.counts
+                from 				dsn&m._stats_0_&&Confidence_lbl_id&z. a, dsn&m._stats_1_u2_&&Confidence_lbl_id&z. b
+                where               a.id=b.id;
+            quit;
+        %end;
+    %end;
+	proc datasets lib=work nolist; delete %do m = 1 %to &ndsn.; %do z = 1 %to &npct.; dsn&m._stats_0_&&Confidence_lbl_id&z. %end; %end; ; quit; run;
+	proc datasets lib=work nolist; delete %do m = 1 %to &ndsn.; %do z = 1 %to &npct.; dsn&m._stats_1_u2_&&Confidence_lbl_id&z. %end; %end; ; quit; run;
+
+	*Merge the percentile totals;
+	%do z = 1 %to &npct.;
+        data dsn_global_totals0_&&Confidence_lbl_id&z.(rename=(_FREQ_=grand_totals_&&Confidence_lbl_id&z. counts=distinct_totals_&&Confidence_lbl_id&z.));
+            set %do m = 1 %to &ndsn.; dsn&m._stats_2_&&Confidence_lbl_id&z. %end; ;  
+        run;
+    %end;
+	proc datasets lib=work nolist; delete %do m = 1 %to &ndsn.; %do z = 1 %to &npct.; dsn&m._stats_2_&&Confidence_lbl_id&z. %end; %end; ; quit; run;
+
+	*Add the global counts so that the score can be created for the percentiles;
+	%do z = 1 %to &npct.;
+	    proc sql noprint;
+            select   global_grand_totals_&&Confidence_lbl_id&z., global_distinct_totals_&&Confidence_lbl_id&z. 
+            into     :global_g_totals_&z., :global_d_totals_&z.
+            from     dsn_global_stats_2_&&Confidence_lbl_id&z.;
+        quit;
+        data dsn_global_totals0_&&Confidence_lbl_id&z.;
+	        set dsn_global_totals0_&&Confidence_lbl_id&z.;
+		    global_grand_totals_&&Confidence_lbl_id&z. = &&global_g_totals_&z.;
+            global_distinct_totals_&&Confidence_lbl_id&z. = &&global_d_totals_&z.;
+	    run;
+    %end;
+    proc datasets lib=work nolist; delete %do z = 1 %to &npct.; dsn_global_totals_2_&&Confidence_lbl_id&z. %end; ; quit; run;
+
+    *Create the scores and reorder the columns;
+	%do z = 1 %to &npct.;
+        data dsn_global_totals0_&&Confidence_lbl_id&z.;
+	        format grand_total_score_&&Confidence_lbl_id&z. 10.8 distinct_total_score_&&Confidence_lbl_id&z. 10.8;
+	        set dsn_global_totals0_&&Confidence_lbl_id&z.;
+		    grand_total_score_&&Confidence_lbl_id&z. = grand_totals_&&Confidence_lbl_id&z./global_grand_totals_&&Confidence_lbl_id&z.;
+            distinct_total_score_&&Confidence_lbl_id&z. = distinct_totals_&&Confidence_lbl_id&z./global_distinct_totals_&&Confidence_lbl_id&z.;
+	    run;
+        proc sql noprint;
+            create table 		dsn_global_totals1_&&Confidence_lbl_id&z. as
+            select  			a.id, 
+                                a.grand_totals_&&Confidence_lbl_id&z., a.global_grand_totals_&&Confidence_lbl_id&z., 
+                                a.grand_total_score_&&Confidence_lbl_id&z., a.distinct_totals_&&Confidence_lbl_id&z., 
+                                a.global_distinct_totals_&&Confidence_lbl_id&z., a.distinct_total_score_&&Confidence_lbl_id&z.
+            from 				dsn_global_totals0_&&Confidence_lbl_id&z. a;
+        quit;
+    %end;
+	proc datasets lib=work nolist; delete %do z = 1 %to &npct.; dsn_global_totals0_&&Confidence_lbl_id&z. %end; ; quit; run;
+ 
+	*Create summary statistics;
+	%do z = 1 %to &npct.;
+        proc means data=dsn_global_totals1_&&Confidence_lbl_id&z. noprint;
+	        var grand_totals_&&Confidence_lbl_id&z. distinct_totals_&&Confidence_lbl_id&z. 
+                grand_total_score_&&Confidence_lbl_id&z. distinct_total_score_&&Confidence_lbl_id&z.;
+            output out=dsn_global_sumstats_&&Confidence_lbl_id&z.;
+        run;
+    %end;
+
+	*Create a temp id variable so the tables can be joined;
+	%do z = 1 %to &npct.;
+        data dsn_global_totals_&&Confidence_lbl_id&z.(drop=id);
+	        format id1 $30.;
+	        set dsn_global_totals1_&&Confidence_lbl_id&z.;
+		    id1=substr(id,1,find(id,"_",1)-1);
+	    run;
+	%end;
+	proc datasets lib=work nolist; delete %do z = 1 %to &npct.; dsn_global_totals1_&&Confidence_lbl_id&z. %end; ; quit; run;
+
+    *Merge the tables with the scores (Cannot do in loop);
+    proc sql noprint;
+        create table 		dsn_global_totals as
+        select  			a.*, b.*, c.*
+        from 				dsn_global_totals_990pct a, dsn_global_totals_950pct b, dsn_global_totals_900pct c
+		where               a.id1=b.id1
+		and                 b.id1=c.id1
+        and                 a.id1=c.id1;
+    quit;
+	/*
+	    proc sql noprint;
+        create table 		dsn_global_totals as
+        select  			a.id1, 
+                            a.grand_totals_990pct, 		a.global_grand_totals_990pct, 		a.grand_total_score_990pct, 
+                            a.distinct_totals_990pct, 	a.global_distinct_totals_990pct, 	a.distinct_total_score_990pct,
+                            b.grand_totals_950pct, 		b.global_grand_totals_950pct, 		b.grand_total_score_950pct, 
+                            b.distinct_totals_950pct, 	b.global_distinct_totals_950pct, 	b.distinct_total_score_950pct,
+							c.grand_totals_900pct, 		c.global_grand_totals_900pct, 		c.grand_total_score_900pct, 
+                            c.distinct_totals_900pct, 	c.global_distinct_totals_900pct, 	c.distinct_total_score_900pct
+        from 				dsn_global_totals_990pct a, dsn_global_totals_950pct b, dsn_global_totals_900pct c
+		where               a.id1=b.id1
+		and                 b.id1=c.id1
+        and                 a.id1=c.id1;
+    quit;
+	*/
+
+	data dsn_global_totals(rename=(id1=id));
+	    set dsn_global_totals;
+	run;
+    /*proc datasets lib=work nolist; delete %do z = 1 %to &npct.; dsn_global_totals_&&Confidence_lbl_id&z. %end; ; quit; run;*/
+
+%mend split;
+
+%let columntitle=dsn;
+
+*Call the macro Split that splits the descriptions into single datasets;
+%split(ndsn=&nobsid.,npct=&Percentile_nobs.,colpre=&columntitle.,ds=textparse_match_trim,col=Match_Text);
+
+*Merge the output from the macro with the dataset;
+
+proc sql noprint;
+    create table 		Final_Stats as
+    select  			a.*,b.* 
+    from 				textparse_match_final a, dsn_global_totals b
+    where               a.id=b.id;
+quit;
+/*
+data Final_Stats(drop=id);
+    set Final_Stats;
+run;
+*/
+
+*********************************************************************************
+Sign off if using SAS/Connect to WRDS
+*********************************************************************************;
+*signoff;
+
+
+	*Fix paraparse and update column so that algorithm will work.
+	*Find out why output is only 62 columns;
+    *Change code to work at the year-level;
+    *Create betweenparse macro;
+

@@ -1,0 +1,38 @@
+        #Remove spaces from section title
+        #$section_title_no_space_str = q{\s*};
+        #$section_title_no_space_rx = qr{$section_title_no_space_str}xms;
+        #$section_title_no_space =
+        #  $section_title =~ s/($section_title_no_space_rx)//xmsgr;
+        #print "\$section_title_no_space:\n" . $section_title_no_space . qq{\n}
+        #  or croak( $print_err_msg . $ERRNO );
+
+        #Remove spaces from next section title
+        #$section_title_next_no_space_str = q{\s*};
+        #$section_title_next_no_space_rx = qr{$section_title_no_space_str}xms;
+        #$section_title_next_no_space =
+        #  $section_title_next =~ s/($section_title_next_no_space_rx)//xmsgr;
+        #print "\$section_title_next_no_space:\n"
+        #  . $section_title_next_no_space . qq{\n}
+        #  or croak( $print_err_msg . $ERRNO );
+
+#Remove leading dots or spaces from section title
+#my $section_title_remove_lead_dot_str .= $empty_str;
+#$section_title_remove_lead_dot_str .= q{^[ .]+};
+#my $section_title_remove_lead_dot_rx = qr{$section_title_remove_lead_dot_str}xms;
+#my $section_title_remove_lead_dot =
+#  $section_title =~ s/($section_title_remove_lead_dot_rx)//xmsgr;
+#$section_title_remove_lead_dot = trim($section_title_remove_lead_dot);
+#print "\$section_title_remove_lead_dot:\n"
+#  . $section_title_remove_lead_dot . qq{\n}
+#  or croak( $print_err_msg . $ERRNO );
+
+#Remove leading dots or spaces from next section title
+#my $section_title_next_remove_lead_dot_str .= $empty_str;
+#$section_title_next_remove_lead_dot_str .= q{^[ .]+};
+#my $section_title_next_remove_lead_dot_rx = qr{$section_title_remove_lead_dot_str}xms;
+#my $section_title_next_remove_lead_dot =
+#  $section_title_next =~ s/($section_title_next_remove_lead_dot_rx)//xmsgr;
+#$section_title_next_remove_lead_dot = trim($section_title_next_remove_lead_dot);
+#print "\$section_title_next_remove_lead_dot:\n"
+#  . $section_title_next_remove_lead_dot . qq{\n}
+#  or croak( $print_err_msg . $ERRNO );

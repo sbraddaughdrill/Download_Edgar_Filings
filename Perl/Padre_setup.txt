@@ -1,0 +1,19 @@
+Add the repository:
+  Name: 	wxperl
+  Address:	http://www.wxperl.co.uk/repository  
+
+
+install the following packages individually
+  Padre
+  Module-Install-PadrePlugin
+  Alien-wxWidgets
+  Wx-ActiveX
+  
+  
+  
+  
+ppm install Alien-wxWidgets
+ppm install Wx-ActiveX
+ppm install Wx
+ppm install Wx-Perl-ProcessStream
+ppm install Wx-Scintilla
